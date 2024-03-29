@@ -1,5 +1,5 @@
 class MessageGenerator:
-    def __init__(self, DIB="0C", VIB='13', data=int(12), exclude_list_dib=None, exclude_list_vib=None, command='20 7A 60 32 00 00'):
+    def __init__(self, DIB="0C", VIB='13', data=11111111, exclude_list_dib=None, exclude_list_vib=None, command='20 7A 60 32 00 00'):
         """
         Initializes the MessageGenerator class.
 
@@ -84,7 +84,10 @@ class MessageGenerator:
                 message_parts = []
                 dib_vib_pair = []
                 for i, dib in enumerate(dib_group[1:], 1):
-                    message_parts.append(f"{dib.strip()} {self.VIB.strip()} {self.transform_data(dib, self.data).strip()}")
+                    if self.transform_data(dib, self.data).strip() == '':
+                        message_parts.append(f"{dib.strip()} {self.VIB.strip()}")
+                    else:
+                        message_parts.append(f"{dib.strip()} {self.VIB.strip()} {self.transform_data(dib, self.data).strip()}")
                     dib_vib_pair.append(f"DIB_{i} = {dib} VIB_{i} = {self.VIB} Data_{i} = {self.data}")
                 dib_vib_pairs.append('\n'.join(dib_vib_pair))
                 messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
@@ -128,16 +131,20 @@ class MessageGenerator:
         Returns:
             str: The transformed data value.
         """
-        if dib not in self.dib_sizes:
+        dib_tmp = format((int(dib,16) & 0x0F), '02X')
+        if dib_tmp not in self.dib_sizes:
             return ''
-        size = self.dib_sizes[dib]
+        size = self.dib_sizes[dib_tmp]
         if size == 0:
             return ''
-        if dib in ['09', '0A', '0B', '0C', '0E']:
-            # Convert data to BCD
+        if dib_tmp in ['09', '0A', '0B', '0C', '0E']:
+                # Convert data to BCD
             bcd_data = [format(int(digit), 'X') for digit in str(data)]
             while len(bcd_data) < size * 2:
-                bcd_data.insert(0, '0')  
+                bcd_data.insert(0, '0')
+            # Truncate BCD data if it's too large for the DIB size
+            if len(bcd_data) > size * 2:
+                bcd_data = bcd_data[:size * 2]
             bytes = [bcd_data[i] + bcd_data[i+1] for i in range(0, len(bcd_data), 2)]
         else:
             hex_data = format(data, '0' + str(size * 2) + 'X')

@@ -12,7 +12,7 @@
 
    ```bash
 
-   cd dib-vib-generator
+   cd DIB_VIB_generator
 
    ```
 3. Run the script:
