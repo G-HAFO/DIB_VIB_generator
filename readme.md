@@ -1,5 +1,3 @@
-   This is a Python script that generates messages by combining DIB and VIB values. It can be used to generate messages for testing purposes or any other scenario where DIB and VIB values need to be combined.
-
     ## Usage
 
     1. Clone the repository:
