@@ -160,6 +160,7 @@ class MessageGenerator:
             tuple: A tuple containing the transformed data value and the truncated data value.
             tuple: A tuple containing the transformed data value and the truncated data value.  
         """  
+        dib = str(int(dib, 16) & 0x0F).zfill(2)
         if dib not in self.dib_sizes:  
             return '', 'Data not transformed, DIB not recognized'  
         if self.dib_sizes[dib] in ['n', None]:  
