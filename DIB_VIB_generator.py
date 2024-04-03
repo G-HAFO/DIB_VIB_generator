@@ -160,7 +160,7 @@ class MessageGenerator:
             tuple: A tuple containing the transformed data value and the truncated data value.
             tuple: A tuple containing the transformed data value and the truncated data value.  
         """  
-        dib = str(int(dib, 16) & 0x0F).zfill(2)
+        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()
         if dib not in self.dib_sizes:  
             return '', 'Data not transformed, DIB not recognized'  
         if self.dib_sizes[dib] in ['n', None]:  
@@ -184,7 +184,7 @@ class MessageGenerator:
         Returns:
             tuple: A tuple containing the transformed data in hexadecimal format and the truncated data.
         """
-        dib = str(int(dib, 16) & 0x0F).zfill(2)  # Convert dib to string and pad with leading zero if necessary
+        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert dib to string and pad with leading zero if necessary
         size = self.dib_sizes.get(dib, 0)  # Use 0 as default size if dib is not found
         data_max = 2 ** (size * 8) - 1
         data = str(data)
@@ -209,9 +209,7 @@ class MessageGenerator:
                 The transformed data is a string with bytes separated by spaces,
                 and the truncated data is a string without leading zeros.
         """
-        dib = int(dib, 16)
-        dib = dib & 0x0F
-        dib = format(dib, '02X')
+        dib=hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()
         size = self.dib_sizes.get(dib, 0)
         bcd_data = [format(int(digit), 'X') for digit in str(data)]
         bcd_data = ['0'] * (size * 2 - len(bcd_data)) + bcd_data[-size * 2:]
@@ -237,10 +235,10 @@ class MessageGenerator:
             try:
                 dib = format(int(dib, 16) & 0x0F, '02X')
             except ValueError:
-                print("Invalid DIB format. Please enter a hexadecimal value.")
+                print("\nInvalid DIB format. Please enter a hexadecimal value.")
                 continue
             size = self.dib_sizes.get(dib, 0) * 8 
-            print(f"Size in bytes based on DIB: {size}")
+            print(f"\nSize in bytes based on DIB: {size}")
             data = input("Enter Data: ")
             try:
                 int(data)
@@ -262,7 +260,7 @@ class MessageGenerator:
         
         
 
-dib_exclude_list = ['05','06','07','0F','0D']
+dib_exclude_list = ['00','05','06','07','0F','0D']
 
 def main():
     generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command='[01]B>20 7A 60 32 00 00',group_size=8)
@@ -271,11 +269,16 @@ def main():
         print(msg)
         for pair in pair_group:
             print( pair['DIB'], pair['VIB'], pair['Data'])"""
-    messages,dib_vib_pairs=generator.input_data()
-    for msg, pair in zip(messages, dib_vib_pairs):
-        print(msg)
-        print(pair['DIB'], pair['VIB'], pair['Data'])
-
+    with open('data.txt', 'w') as f:
+        generator = MessageGenerator(command='20 7A 60 32 00 00',group_size=1)
+        generator_dibs = generator.DIB_generator()
+        for group in generator_dibs:
+            generator.DIB = group[1]
+            messages, dib_vib_pairs = generator.generate_message(type='VIB_primary')
+            for msg, pair_group in zip(messages, dib_vib_pairs):
+                f.write(f'{msg}\n')
+                for pair in pair_group:
+                    f.write(f"DIB={pair['DIB']} VIB={pair['VIB']} Data={pair['Data']}\n")
     
 
 

@@ -1,0 +1,4 @@
+# Ignore specific files
+data.txt
+test.py
+carovnije.py
