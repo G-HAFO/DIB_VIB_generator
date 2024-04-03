@@ -44,4 +44,4 @@
 
 ## License
 
-    This project is licensed under the MIT License. See the[LICENSE](LICENSE) filefor details.
+    This project is licensed under the G-HAFO license. See my doctor for details.
