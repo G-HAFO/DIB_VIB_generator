@@ -8,7 +8,7 @@ class MessageGenerator:
         data (int): The default data value.
         exclude_list_dib (list): A list of DIB values to exclude.
         exclude_list_vib (list): A list of VIB values to exclude.
-        command (str): The default command value.
+        command_start (str): The default command_start value.
         dib_sizes (dict): A dictionary mapping DIB values to their corresponding sizes.
         group_size (int): The size of each DIB_VIB group.
 
@@ -22,7 +22,7 @@ class MessageGenerator:
         transform_and_truncate_data_BCD(data, dib): Transforms and truncates the given data into BCD format.
     """
 
-    def __init__(self, DIB="0C", VIB='13', data=11111111, exclude_list_dib=None, exclude_list_vib=None, command='20 7A 60 32 00 00', group_size=8):
+    def __init__(self, DIB="0C", VIB='13', data=11111111, exclude_list_dib=None, exclude_list_vib=None, command_start='',command_end='', group_size=8):
         """
         Initializes the MessageGenerator class.
 
@@ -32,7 +32,7 @@ class MessageGenerator:
             data (int): The default data value.
             exclude_list_dib (list): A list of DIB values to exclude.
             exclude_list_vib (list): A list of VIB values to exclude.
-            command (str): The default command value.
+            command_start (str): The default command_start value.
             group_size (int): The size of each DIB group.
         """
         self.DIB = DIB
@@ -40,7 +40,8 @@ class MessageGenerator:
         self.data = data
         self.exclude_list_dib = exclude_list_dib if exclude_list_dib else []
         self.exclude_list_vib = exclude_list_vib if exclude_list_vib else []
-        self.command = command
+        self.command_start = command_start
+        self.command_end = command_end
         self.dib_sizes = {
             '00': 0, '01': 1, '02': 2, '03': 3, '04': 4, '05': 4, '06': 6, '07': 8,
             '08': 0, '09': 1, '0A': 2, '0B': 3, '0C': 4, '0D': 'n', '0E': 6, '0F': None
@@ -117,7 +118,7 @@ class MessageGenerator:
                     message_parts.append(f"{dib.strip()} {self.VIB.strip()} {transformed_data.strip()}")
                     group_data.append({"DIB": dib, "VIB": self.VIB, "Data": truncated_data})
                 dib_vib_data.append(group_data)
-                messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
+                messages.append(f"{self.command_start.strip()} {' '.join(filter(None, message_parts)).strip() } {self.command_end.strip()}")
                 self.data += 1
         elif type == 'VIB_primary':
             for vib_group in self.VIB_generator():
@@ -128,7 +129,7 @@ class MessageGenerator:
                     message_parts.append(f"{self.DIB.strip()} {vib.strip()} {transformed_data.strip()}")
                     group_data.append({"DIB": self.DIB, "VIB": vib, "Data": truncated_data})
                 dib_vib_data.append(group_data)
-                messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
+                messages.append(f"{self.command_start.strip()} {' '.join(filter(None, message_parts)).strip()} {self.command_end.strip()}")
                 self.data += 1
         elif type == 'VIB_manual_extension':
             if not extension:
@@ -142,7 +143,7 @@ class MessageGenerator:
                     message_parts.append(f"{extension} {self.DIB.strip()} {vib.strip()} {transformed_data.strip()}")
                     group_data.append({"DIB": self.DIB, "VIB": extension + " " + vib, "Data": truncated_data})
                 dib_vib_data.append(group_data)
-                messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
+                messages.append(f"{self.command_start.strip()} {' '.join(filter(None, message_parts)).strip()} {self.command_end.strip()}")
                 self.data += 1
         else:
             print('Invalid type')
@@ -160,7 +161,7 @@ class MessageGenerator:
             tuple: A tuple containing the transformed data value and the truncated data value.
             tuple: A tuple containing the transformed data value and the truncated data value.  
         """  
-        dib = str(int(dib, 16) & 0x0F).zfill(2)
+        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()
         if dib not in self.dib_sizes:  
             return '', 'Data not transformed, DIB not recognized'  
         if self.dib_sizes[dib] in ['n', None]:  
@@ -184,7 +185,7 @@ class MessageGenerator:
         Returns:
             tuple: A tuple containing the transformed data in hexadecimal format and the truncated data.
         """
-        dib = str(int(dib, 16) & 0x0F).zfill(2)  # Convert dib to string and pad with leading zero if necessary
+        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert dib to string and pad with leading zero if necessary
         size = self.dib_sizes.get(dib, 0)  # Use 0 as default size if dib is not found
         data_max = 2 ** (size * 8) - 1
         data = str(data)
@@ -209,9 +210,7 @@ class MessageGenerator:
                 The transformed data is a string with bytes separated by spaces,
                 and the truncated data is a string without leading zeros.
         """
-        dib = int(dib, 16)
-        dib = dib & 0x0F
-        dib = format(dib, '02X')
+        dib=hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()
         size = self.dib_sizes.get(dib, 0)
         bcd_data = [format(int(digit), 'X') for digit in str(data)]
         bcd_data = ['0'] * (size * 2 - len(bcd_data)) + bcd_data[-size * 2:]
@@ -220,13 +219,13 @@ class MessageGenerator:
         truncated_data = str(int(''.join(bcd_data)))
         return transformed_data, truncated_data
     
-    def input_data(self, command='20 7A 60 32 00 00'):
+    def input_data(self, command_start='20 7A 60 32 00 00',command_end =''):
         """
         Collects DIB, VIB, and Data from user input and returns a list of messages and DIB/VIB data.
 
         Returns:
             tuple: A tuple containing two lists:
-                - messages: A list of messages in the format "<command> <DIB> <VIB> <transformed_data>".
+                - messages: A list of messages in the format "<command_start> <DIB> <VIB> <transformed_data>".
                 - dib_vib_data: A list of dictionaries containing the DIB, VIB, and truncated Data.
         """
         dib_vib_data = []
@@ -237,10 +236,10 @@ class MessageGenerator:
             try:
                 dib = format(int(dib, 16) & 0x0F, '02X')
             except ValueError:
-                print("Invalid DIB format. Please enter a hexadecimal value.")
+                print("\nInvalid DIB format. Please enter a hexadecimal value.")
                 continue
             size = self.dib_sizes.get(dib, 0) * 8 
-            print(f"Size in bytes based on DIB: {size}")
+            print(f"\nSize in bytes based on DIB: {size}")
             data = input("Enter Data: ")
             try:
                 int(data)
@@ -250,7 +249,7 @@ class MessageGenerator:
 
             transformed_data, truncated_data = self.transform_data(dib, int(data))
 
-            message = command + " " + dib + " " + vib + " " + transformed_data
+            message = command_start + " " + dib + " " + vib + " " + transformed_data + " "  +  command_end 
             messages.append(message)
             dib_vib_data.append({"DIB": dib, "VIB": vib, "Data": truncated_data})
 
@@ -262,19 +261,25 @@ class MessageGenerator:
         
         
 
-dib_exclude_list = ['05','06','07','0F','0D']
+dib_exclude_list = ['00','05','06','07','0F','0D']
 
 def main():
-    generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command='[01]B>20 7A 60 32 00 00',group_size=8)
+    generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command_start='[01]B>20 7A 60 32 00 00',group_size=8)
     ##messages,dib_vib_pairs = generator.generate_message(type= 'DIB', extension='FD')
     """for msg, pair_group in zip(messages, dib_vib_pairs):
         print(msg)
         for pair in pair_group:
             print( pair['DIB'], pair['VIB'], pair['Data'])"""
-    messages,dib_vib_pairs=generator.input_data()
-    for msg, pair in zip(messages, dib_vib_pairs):
-        print(msg)
-        print(pair['DIB'], pair['VIB'], pair['Data'])
+    with open('data.txt', 'w') as f:
+        generator = MessageGenerator(command_start='20 7A 60 32 00 00',group_size=1,command_end='FF')
+        generator_dibs = generator.DIB_generator()
+        for group in generator_dibs:
+            generator.DIB = group[1]
+            messages, dib_vib_pairs = generator.generate_message(type='VIB_primary')
+            for msg, pair_group in zip(messages, dib_vib_pairs):
+                f.write(f'{msg}\n')
+                for pair in pair_group:
+                    f.write(f"DIB={pair['DIB']} VIB={pair['VIB']} Data={pair['Data']}\n")
 
     
 
