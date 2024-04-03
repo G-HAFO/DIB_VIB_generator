@@ -60,12 +60,12 @@ class MessageGenerator:
         """
         DIB_VIB = []
         for i in range(lower_limit, upper_limit + 1, self.group_size):
-            row = [0]
+            row = []
             for j in range(i, i + self.group_size):
                 if format(j, '02X') not in self.exclude_list_dib:
                     row.append(format(j, '02X'))
             if row:
-                row[0] = len(row) - 1
+                row.insert(0, len(row))
                 DIB_VIB.append(row)
         return DIB_VIB
 
@@ -81,71 +81,72 @@ class MessageGenerator:
             list: A list of VIB values.
         """
         DIB_VIB = []
-        for i in range(lower_limit, upper_limit + 1, 8):
-            row = [0]
-            for j in range(i, i + 8):
+        for i in range(lower_limit, upper_limit + 1, self.group_size):
+            row = []
+            for j in range(i, i + self.group_size):
                 if format(j, '02X') not in self.exclude_list_vib:
                     row.append(format(j, '02X'))
             if row:
-                row[0] = len(row) - 1
+                row.insert(0, len(row))
                 DIB_VIB.append(row)
         return DIB_VIB
 
-    def generate_message_parts(self, group, type, extension=None):
-        """
-        Generates message parts based on the given group and type.
-
-        Args:
-            group (list): The group of DIB or VIB values.
-            type (str): The type of message parts to generate.
-            extension (str, optional): The extension value for VIB_single_extension type.
-
-        Returns:
-            tuple: A tuple containing the generated message parts and the corresponding DIB-VIB pairs.
-        """
-        message_parts = []
-        dib_vib_pair = []
-        for i, item in enumerate(group[1:], 1):
-            transformed_data, truncated_data = self.transform_data(item, self.data)
-            if type == 'DIB':
-                message_parts.append(f"{item.strip()} {self.VIB.strip()} {transformed_data.strip()}")
-                dib_vib_pair.append(f"DIB_{i} = {item} VIB_{i} = {self.VIB} Data_{i} = {truncated_data}")
-            else:
-                message_parts.append(f"{self.DIB.strip()} {item.strip()} {transformed_data.strip()}")
-                dib_vib_pair.append(f"DIB_{i} = {self.DIB} VIB_{i} = {item} Data_{i} = {truncated_data}")
-        return message_parts, dib_vib_pair
-
     def generate_message(self, type=None, extension=False):
         """
-        Generates messages based on the given type.
+        Generates messages based on the provided type and extension.
 
         Args:
-            type (str, optional): The type of messages to generate.
-            extension (bool, optional): Whether to include extension value for VIB_single_extension type.
+            type (str): The type of message to generate. Possible values are 'DIB', 'VIB_primary', and 'VIB_manual_extension'.
+            extension (bool): Indicates whether an extension value should be provided for 'VIB_manual_extension' type.
 
         Returns:
-            tuple: A tuple containing the generated messages and the corresponding DIB-VIB pairs.
+            tuple: A tuple containing two lists. The first list contains the generated messages, and the second list contains the corresponding DIB-VIB data.
+
+        Raises:
+            None
+
         """
         messages = []
-        dib_vib_pairs = []
+        dib_vib_data = []
         if type == 'DIB':
             for dib_group in self.DIB_generator():
-                message_parts, dib_vib_pair = self.generate_message_parts(dib_group, type)
-                dib_vib_pairs.append('\n'.join(dib_vib_pair))
+                message_parts = []
+                group_data = []
+                for i, dib in enumerate(dib_group[1:], 1):
+                    transformed_data, truncated_data = self.transform_data(dib, self.data)
+                    message_parts.append(f"{dib.strip()} {self.VIB.strip()} {transformed_data.strip()}")
+                    group_data.append({"DIB": dib, "VIB": self.VIB, "Data": truncated_data})
+                dib_vib_data.append(group_data)
                 messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
                 self.data += 1
-        elif type in ['VIB_primary', 'VIB_single_extension']:
-            if type == 'VIB_single_extension' and not extension:
+        elif type == 'VIB_primary':
+            for vib_group in self.VIB_generator():
+                message_parts = []
+                group_data = []
+                for i, vib in enumerate(vib_group[1:], 1):
+                    transformed_data, truncated_data = self.transform_data(self.DIB, self.data)
+                    message_parts.append(f"{self.DIB.strip()} {vib.strip()} {transformed_data.strip()}")
+                    group_data.append({"DIB": self.DIB, "VIB": vib, "Data": truncated_data})
+                dib_vib_data.append(group_data)
+                messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
+                self.data += 1
+        elif type == 'VIB_manual_extension':
+            if not extension:
                 print('Please provide the extension value')
                 return
             for vib_group in self.VIB_generator():
-                message_parts, dib_vib_pair = self.generate_message_parts(vib_group, type)
-                dib_vib_pairs.append('\n'.join(dib_vib_pair))
+                message_parts = []
+                group_data = []
+                for i, vib in enumerate(vib_group[1:], 1):
+                    transformed_data, truncated_data = self.transform_data(self.DIB, self.data)
+                    message_parts.append(f"{extension} {self.DIB.strip()} {vib.strip()} {transformed_data.strip()}")
+                    group_data.append({"DIB": self.DIB, "VIB": extension + " " + vib, "Data": truncated_data})
+                dib_vib_data.append(group_data)
                 messages.append(f"{self.command.strip()} {' '.join(filter(None, message_parts))}")
                 self.data += 1
         else:
             print('Invalid type')
-        return messages, dib_vib_pairs
+        return messages, dib_vib_data
 
     def transform_data(self, dib, data):
         """
@@ -179,21 +180,18 @@ class MessageGenerator:
         Returns:
             tuple: A tuple containing the transformed data in hexadecimal format and the truncated data.
         """
-        dib = int(dib, 16)
-        dib = dib & 0x0F
-        dib = format(dib, '02X')
-        data_max = 2 ** (self.dib_sizes[dib] * 8) - 1
+        dib = str(int(dib, 16) & 0x0F).zfill(2)  # Convert dib to string and pad with leading zero if necessary
+        size = self.dib_sizes.get(dib, 0)  # Use 0 as default size if dib is not found
+        data_max = 2 ** (size * 8) - 1
         data = str(data)
         while int(data) > data_max:
             data = data[1:]
-        transformed_data = hex(int(data))[2:].upper()
-        while len(transformed_data) < self.dib_sizes[dib] * 2:
-            transformed_data = '0' + transformed_data
+        transformed_data = hex(int(data))[2:].upper().zfill(size * 2)
         bytes = [transformed_data[i:i+2] for i in range(0, len(transformed_data), 2)]
         transformed_data = ' '.join(bytes[::-1]) + ' '
         truncated_data = data
         return transformed_data, truncated_data
-
+    
     def transform_and_truncate_data_BCD(self, data, dib):
         """
         Transforms and truncates the given data into BCD format.
@@ -212,30 +210,60 @@ class MessageGenerator:
         dib = format(dib, '02X')
         size = self.dib_sizes.get(dib, 0)
         bcd_data = [format(int(digit), 'X') for digit in str(data)]
-        while len(bcd_data) < size * 2:
-            bcd_data.insert(0, '0')
-        if len(bcd_data) > size * 2:
-            bcd_data = bcd_data[-size * 2:]
+        bcd_data = ['0'] * (size * 2 - len(bcd_data)) + bcd_data[-size * 2:]
         bytes = [bcd_data[i] + bcd_data[i+1] for i in range(0, len(bcd_data), 2)]
-        transformed_data = ' '.join(bytes) + ' '
+        transformed_data = ' '.join(bytes[::-1]) + ' '
         truncated_data = str(int(''.join(bcd_data)))
         return transformed_data, truncated_data
-        transformed_data = ' '.join(bytes[::-1])
-        return transformed_data, ''.join(bcd_data).lstrip('0')
-        truncated_data = ''.join(bytes[::]).lstrip('0')
-        return transformed_data, truncated_data
+    
+    def input_data(self, command='20 7A 60 32 00 00'):
+        """
+        Collects DIB, VIB, and Data from user input and returns a list of messages and DIB/VIB data.
 
+        Returns:
+            tuple: A tuple containing two lists:
+                - messages: A list of messages in the format "<command> <DIB> <VIB> <transformed_data>".
+                - dib_vib_data: A list of dictionaries containing the DIB, VIB, and truncated Data.
+        """
+        dib_vib_data = []
+        messages = []
+        while True:
+            dib = input("Enter DIB: ")
+            vib = input("Enter VIB: ")
+
+            dib = format(int(dib, 16) & 0x0F, '02X')
+            size = self.dib_sizes.get(dib, 0) * 8 
+            print(f"Size in bytes based on DIB: {size}")
+            data = input("Enter Data: ")
+
+            transformed_data, truncated_data = self.transform_data(dib, int(data))
+
+            message = command + " " + dib + " " + vib + " " + transformed_data
+            messages.append(message)
+            dib_vib_data.append({"DIB": dib, "VIB": vib, "Data": truncated_data})
+
+            another = input("Do you want to enter another? (yes/no): ")
+            if another.lower() != "yes":
+                break
+
+        return messages, dib_vib_data
         
         
 
 dib_exclude_list = ['05','06','07','0F','0D']
 
 def main():
-    generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command='')
-    messages,dib_vib_pairs = generator.generate_message(type= 'DIB')
+    generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command='[01]B>20 7A 60 32 00 00',group_size=8)
+    ##messages,dib_vib_pairs = generator.generate_message(type= 'DIB', extension='FD')
+    """for msg, pair_group in zip(messages, dib_vib_pairs):
+        print(msg)
+        for pair in pair_group:
+            print( pair['DIB'], pair['VIB'], pair['Data'])"""
+    messages,dib_vib_pairs=generator.input_data()
     for msg, pair in zip(messages, dib_vib_pairs):
         print(msg)
-        print(pair)
+        print(pair['DIB'], pair['VIB'], pair['Data'])
+
     
 
 
