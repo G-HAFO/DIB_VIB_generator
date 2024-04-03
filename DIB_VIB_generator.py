@@ -158,16 +158,19 @@ class MessageGenerator:
 
         Returns:
             tuple: A tuple containing the transformed data value and the truncated data value.
-        """
-        if dib not in self.dib_sizes:
-            return '', 'Data not transformed, DIB not recognized'
-        size = self.dib_sizes[dib]
-        if size == 0:
-            return '', 'Data not transformed, size is 0'
-        if dib in ['09', '0A', '0B', '0C', '0E']:
-            return self.transform_and_truncate_data_BCD(data, dib)
-        else:
-            return self.transform_and_truncate_data_hex_dec(data, dib)
+            tuple: A tuple containing the transformed data value and the truncated data value.  
+        """  
+        if dib not in self.dib_sizes:  
+            return '', 'Data not transformed, DIB not recognized'  
+        if self.dib_sizes[dib] in ['n', None]:  
+            return '', 'Data not transformed, invalid size'  
+        size = self.dib_sizes[dib]  
+        if size == 0:  
+            return '', 'Data not transformed, size is 0'  
+        if dib in ['09', '0A', '0B', '0C', '0E']:  
+            return self.transform_and_truncate_data_BCD(data, dib)  
+        else:  
+            return self.transform_and_truncate_data_hex_dec(data, dib)  
 
     def transform_and_truncate_data_hex_dec(self, data, dib):
         """
@@ -230,11 +233,19 @@ class MessageGenerator:
         while True:
             dib = input("Enter DIB: ")
             vib = input("Enter VIB: ")
-
-            dib = format(int(dib, 16) & 0x0F, '02X')
+            try:
+                dib = format(int(dib, 16) & 0x0F, '02X')
+            except ValueError:
+                print("Invalid DIB format. Please enter a hexadecimal value.")
+                continue
             size = self.dib_sizes.get(dib, 0) * 8 
             print(f"Size in bytes based on DIB: {size}")
             data = input("Enter Data: ")
+            try:
+                int(data)
+            except ValueError:
+                print("Invalid Data format. Please enter a numeric value.")
+                continue
 
             transformed_data, truncated_data = self.transform_data(dib, int(data))
 
