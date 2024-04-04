@@ -1,3 +1,5 @@
+import json
+
 class MessageGenerator:
     """
     A class for generating messages with DIB (Data Information Block) and VIB (Value Information Block) values.
@@ -161,8 +163,7 @@ class MessageGenerator:
             tuple: A tuple containing the transformed data value and the truncated data value.
             tuple: A tuple containing the transformed data value and the truncated data value.  
         """  
-        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()
-        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()
+        dib = hex(int(dib[0:2], 16) & 0x0F)[2:].zfill(2).upper()
         if dib not in self.dib_sizes:  
             return '', 'Data not transformed, DIB not recognized'  
         if self.dib_sizes[dib] in ['n', None]:  
@@ -233,18 +234,24 @@ class MessageGenerator:
         """
         dib_vib_data = []
         messages = []
+        info_data = []
+        from typing import Tuple  # Add missing import statement
+
         while True:
             dib = input("Enter DIB: ")
             vib = input("Enter VIB: ")
+            dib_values = dib.split()
+            vib_values = vib.split()
+            total_size = 0
             try:
-                dib = format(int(dib, 16) & 0x0F, '02X')
+                
+                dib_value = format(int(dib[0:2], 16) & 0x0F, '02X')
+                size = self.dib_sizes.get(dib_value, 0) * 8 
+                print(f"\nTotal size in bytes based on DIB: {size}")
             except ValueError:
-                print("\nInvalid DIB format. Please enter a hexadecimal value.")
-                print("\nInvalid DIB format. Please enter a hexadecimal value.")
+                print("\nInvalid DIB format. Please enter hexadecimal values separated by space.")
                 continue
-            size = self.dib_sizes.get(dib, 0) * 8 
-            print(f"\nSize in bytes based on DIB: {size}")
-            print(f"\nSize in bytes based on DIB: {size}")
+
             data = input("Enter Data: ")
             try:
                 int(data)
@@ -254,11 +261,12 @@ class MessageGenerator:
 
             transformed_data, truncated_data = self.transform_data(dib, int(data))
 
-            message = command_start + " " + dib + " " + vib + " " + transformed_data + " "  +  command_end 
-            messages.append(message)
+            message = (command_start + " " + dib + " " + vib + " " + transformed_data + ' '  +  command_end)
+            messages.append(message.strip())
             dib_vib_data.append({"DIB": dib, "VIB": vib, "Data": truncated_data})
+            info_data.append(dib_vib_data)
 
-            another = input("Do you want to enter another? (yes/no): ")
+            another = input("\nDo you want to enter another? (yes/no): ")
             if another.lower() != "yes":
                 break
 
@@ -276,7 +284,7 @@ def main():
         print(msg)
         for pair in pair_group:
             print( pair['DIB'], pair['VIB'], pair['Data'])"""
-    with open('data.txt', 'w') as f:
+    """with open('data.txt', 'w') as f:
         generator = MessageGenerator(command='20 7A 60 32 00 00',group_size=1)
         generator_dibs = generator.DIB_generator()
         for group in generator_dibs:
@@ -285,7 +293,11 @@ def main():
             for msg, pair_group in zip(messages, dib_vib_pairs):
                 f.write(f'{msg}\n')
                 for pair in pair_group:
-                    f.write(f"DIB={pair['DIB']} VIB={pair['VIB']} Data={pair['Data']}\n")
+                    f.write(f"DIB={pair['DIB']} VIB={pair['VIB']} Data={pair['Data']}\n")"""
+    messages, dib_vib_pairs = generator.input_data()
+    for msg, pair_group in zip(messages, dib_vib_pairs):
+        print(msg)
+        print( pair_group['DIB'], pair_group['VIB'], pair_group['Data'])
     
 
 
