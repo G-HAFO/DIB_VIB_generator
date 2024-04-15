@@ -11,6 +11,7 @@ class MessageGenerator:
         exclude_list_dib (list): A list of DIB values to exclude.
         exclude_list_vib (list): A list of VIB values to exclude.
         command_start (str): The default command_start value.
+        command_end (str): The default command_end value.
         dib_sizes (dict): A dictionary mapping DIB values to their corresponding sizes.
         group_size (int): The size of each DIB_VIB group.
 
@@ -24,7 +25,7 @@ class MessageGenerator:
         transform_and_truncate_data_BCD(data, dib): Transforms and truncates the given data into BCD format.
     """
 
-    def __init__(self, DIB="0C", VIB='13', data=11111111, exclude_list_dib=None, exclude_list_vib=None, command_start='',command_end='', group_size=8):
+    def __init__(self, DIB="0C", VIB='13', data=11111111, exclude_list_dib=None, exclude_list_vib=None, command_start='', command_end='', group_size=8):
         """
         Initializes the MessageGenerator class.
 
@@ -35,6 +36,7 @@ class MessageGenerator:
             exclude_list_dib (list): A list of DIB values to exclude.
             exclude_list_vib (list): A list of VIB values to exclude.
             command_start (str): The default command_start value.
+            command_end (str): The default command_end value.
             group_size (int): The size of each DIB group.
         """
         self.DIB = DIB
@@ -116,7 +118,8 @@ class MessageGenerator:
                 message_parts = []
                 group_data = []
                 for i, dib in enumerate(dib_group[1:], 1):
-                    transformed_data, truncated_data = self.transform_data(dib, self.data)
+                    transformed_data, truncated_data, size = self.transform_data(dib, self.data)
+                    self.command_start = self.correct_msg_length(self.command_start, dib, self.VIB, size)
                     message_parts.append(f"{dib.strip()} {self.VIB.strip()} {transformed_data.strip()}")
                     group_data.append({"DIB": dib, "VIB": self.VIB, "Data": truncated_data})
                 dib_vib_data.append(group_data)
@@ -127,7 +130,8 @@ class MessageGenerator:
                 message_parts = []
                 group_data = []
                 for i, vib in enumerate(vib_group[1:], 1):
-                    transformed_data, truncated_data = self.transform_data(self.DIB, self.data)
+                    transformed_data, truncated_data, size = self.transform_data(self.DIB, self.data)
+                    self.command_start = self.correct_msg_length(self.command_start, self.DIB, vib, size)
                     message_parts.append(f"{self.DIB.strip()} {vib.strip()} {transformed_data.strip()}")
                     group_data.append({"DIB": self.DIB, "VIB": vib, "Data": truncated_data})
                 dib_vib_data.append(group_data)
@@ -141,8 +145,9 @@ class MessageGenerator:
                 message_parts = []
                 group_data = []
                 for i, vib in enumerate(vib_group[1:], 1):
-                    transformed_data, truncated_data = self.transform_data(self.DIB, self.data)
-                    message_parts.append(f"{extension} {self.DIB.strip()} {vib.strip()} {transformed_data.strip()}")
+                    transformed_data, truncated_data, size = self.transform_data(self.DIB, self.data)
+                    self.command_start = self.correct_msg_length(self.command_start, self.DIB, vib + ' ' + extension, size)
+                    message_parts.append(f"{self.DIB.strip()} {extension} {vib.strip()} {transformed_data.strip()}")
                     group_data.append({"DIB": self.DIB, "VIB": extension + " " + vib, "Data": truncated_data})
                 dib_vib_data.append(group_data)
                 messages.append(f"{self.command_start.strip()} {' '.join(filter(None, message_parts)).strip()} {self.command_end.strip()}")
@@ -161,20 +166,19 @@ class MessageGenerator:
 
         Returns:
             tuple: A tuple containing the transformed data value and the truncated data value.
-            tuple: A tuple containing the transformed data value and the truncated data value.  
-        """  
+        """
         dib = hex(int(dib[0:2], 16) & 0x0F)[2:].zfill(2).upper()
-        if dib not in self.dib_sizes:  
-            return '', 'Data not transformed, DIB not recognized'  
-        if self.dib_sizes[dib] in ['n', None]:  
-            return '', 'Data not transformed, invalid size'  
-        size = self.dib_sizes[dib]  
-        if size == 0:  
-            return '', 'Data not transformed, size is 0'  
-        if dib in ['09', '0A', '0B', '0C', '0E']:  
-            return self.transform_and_truncate_data_BCD(data, dib)  
-        else:  
-            return self.transform_and_truncate_data_hex_dec(data, dib)  
+        if dib not in self.dib_sizes:
+            return '', 'Data not transformed, DIB not recognized'
+        if self.dib_sizes[dib] in ['n', None]:
+            return '', 'Data not transformed, invalid size'
+        size = self.dib_sizes[dib]
+        if size == 0:
+            return '', 'Data not transformed, size is 0'
+        if dib in ['09', '0A', '0B', '0C', '0E']:
+            return self.transform_and_truncate_data_BCD(data, dib)
+        else:
+            return self.transform_and_truncate_data_hex_dec(data, dib)
 
     def transform_and_truncate_data_hex_dec(self, data, dib):
         """
@@ -188,17 +192,66 @@ class MessageGenerator:
             tuple: A tuple containing the transformed data in hexadecimal format and the truncated data.
         """
         dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert dib to string and pad with leading zero if necessary
-        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert dib to string and pad with leading zero if necessary
         size = self.dib_sizes.get(dib, 0)  # Use 0 as default size if dib is not found
         data_max = 2 ** (size * 8) - 1
         data = str(data)
+        return data, data[:size * 2]
+
+    def transform_and_truncate_data_BCD(self, data, dib):
+        """
+        Transforms and truncates the given data into BCD format.
+
+        Args:
+            data (int): The data to be transformed.
+            dib (str): The DIB (Data Information Block) value.
+
+        Returns:
+            tuple: A tuple containing the transformed data in BCD format and the truncated data.
+        """
+        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert dib to string and pad with leading zero if necessary
+        size = self.dib_sizes.get(dib, 0)  # Use 0 as default size if dib is not found
+        data_max = 10 ** size - 1
+        data = str(data)
+        return data, data[:size]
+
+    def correct_msg_length(self, command_start, dib, vib, size):
+        """
+        Corrects the message length by adding or removing spaces.
+
+        Args:
+            command_start (str): The command start string.
+            dib (str): The DIB value.
+            vib (str): The VIB value.
+            size (int): The size of the data.
+
+        Returns:
+            str: The corrected command start string.
+        """
+        dib = hex(int(dib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert dib to string and pad with leading zero if necessary
+        vib = hex(int(vib, 16) & 0x0F)[2:].zfill(2).upper()  # Convert vib to string and pad with leading zero if necessary
+        if size == 0:
+            return command_start.strip()
+        elif size == 1:
+            return command_start.strip() + ' '
+        elif size == 2:
+            return command_start.strip() + '  '
+        elif size == 3:
+            return command_start.strip() + '   '
+        elif size == 4:
+            return command_start.strip() + '    '
+        elif size == 6:
+            return command_start.strip() + '      '
+        elif size == 8:
+            return command_start.strip() + '        '
+        else:
+            return command_start.strip()
         while int(data) > data_max:
             data = data[1:]
         transformed_data = hex(int(data))[2:].upper().zfill(size * 2)
         bytes = [transformed_data[i:i+2] for i in range(0, len(transformed_data), 2)]
         transformed_data = ' '.join(bytes[::-1]) + ' '
         truncated_data = data
-        return transformed_data, truncated_data
+        return transformed_data, truncated_data,size
     
     def transform_and_truncate_data_BCD(self, data, dib):
         """
@@ -221,7 +274,7 @@ class MessageGenerator:
         bytes = [bcd_data[i] + bcd_data[i+1] for i in range(0, len(bcd_data), 2)]
         transformed_data = ' '.join(bytes[::-1]) + ' '
         truncated_data = str(int(''.join(bcd_data)))
-        return transformed_data, truncated_data
+        return transformed_data, truncated_data,size
     
     def input_data(self, command_start='20 7A 60 32 00 00',command_end =''):
         """
@@ -244,7 +297,6 @@ class MessageGenerator:
             vib_values = vib.split()
             total_size = 0
             try:
-                
                 dib_value = format(int(dib[0:2], 16) & 0x0F, '02X')
                 size = self.dib_sizes.get(dib_value, 0) * 8 
                 print(f"\nTotal size in bytes based on DIB: {size}")
@@ -261,7 +313,7 @@ class MessageGenerator:
 
             transformed_data, truncated_data = self.transform_data(dib, int(data))
 
-            message = (command_start + " " + dib + " " + vib + " " + transformed_data + ' '  +  command_end)
+            message = dib + " " + vib + " " + transformed_data
             messages.append(message.strip())
             dib_vib_data.append({"DIB": dib, "VIB": vib, "Data": truncated_data})
             info_data.append(dib_vib_data)
@@ -270,16 +322,37 @@ class MessageGenerator:
             if another.lower() != "yes":
                 break
 
-        return messages, dib_vib_data
-        
+        # After the loop, join the messages and append command_start and command_end
+        final_message = command_start + " " + ' '.join(messages) + ' ' + command_end
+        print(final_message)
+
+        return final_message, dib_vib_data
+    
+    def correct_msg_length(self, command_start,dib,vib,data_size):
+        """
+        Corrects the length of the message based on the size of DIB and VIB.
+
+        Args:               
+            command_start (str): The command_start value.
+
+        Returns:    
+            str: The corrected command_start value.
+        """
+        dib_size = len(dib.split())  # Calculate the size of DIB in bytes
+        vib_size = len(vib.split())  # Calculate the size of VIB in bytes
+        total_size = dib_size + vib_size + data_size + 14  # Calculate the total size in bytes
+
+        command_start_list = command_start.split()  # Split the command_start into a list
+        command_start_list[6] = f'{total_size:02X}'  # Replace the 7th element with the hex of total_size
+        return ' '.join(command_start_list) 
         
 
 dib_exclude_list = ['00','05','06','07','0F','0D']
 dib_exclude_list = ['00','05','06','07','0F','0D']
 
 def main():
-    generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command_start='[01]B>20 7A 60 32 00 00',group_size=8)
-    ##messages,dib_vib_pairs = generator.generate_message(type= 'DIB', extension='FD')
+    generator = MessageGenerator(data = 11111111, exclude_list_dib=dib_exclude_list,command_start='1B 2A 01 2A 00 00 12 44 8F 19 55 55 55 55 50 03 7A 60 32 00 00',group_size=1,command_end='1B 42')
+    messages,dib_vib_pairs = generator.generate_message(type= 'VIB_manual_extension', extension='FD')
     """for msg, pair_group in zip(messages, dib_vib_pairs):
         print(msg)
         for pair in pair_group:
@@ -294,10 +367,10 @@ def main():
                 f.write(f'{msg}\n')
                 for pair in pair_group:
                     f.write(f"DIB={pair['DIB']} VIB={pair['VIB']} Data={pair['Data']}\n")"""
-    messages, dib_vib_pairs = generator.input_data()
     for msg, pair_group in zip(messages, dib_vib_pairs):
         print(msg)
-        print( pair_group['DIB'], pair_group['VIB'], pair_group['Data'])
+        for pair in pair_group:
+            print( pair['DIB'], pair['VIB'], pair['Data'])
     
 
 
